@@ -1,6 +1,6 @@
 """
-Report Generator - 生成 Markdown 报告
-基于收集的数据生成结构化报告
+Report Generator - 生成多种格式的报告
+Markdown, JSON, HTML, 和总结格式
 """
 
 import os
@@ -11,32 +11,33 @@ import json
 
 
 class ReportGenerator:
-    def __init__(self, data_dir: str = "storage/data"):
+    def __init__(self, github_db: str = "storage/data/github_activity.db",
+                 twitter_db: str = "storage/data/twitter_posts_jina.db",
+                 reddit_db: str = "storage/data/reddit_posts.db",
+                 hackernews_db: str = "storage/data/hacker_news.db"):
         """
         初始化报告生成器
 
         Args:
-            data_dir: 数据目录路径
+            github_db: GitHub 数据库路径
+            twitter_db: Twitter 数据库路径
+            reddit_db: Reddit 数据库路径
+            hackernews_db: Hacker News 数据库路径
         """
-        self.data_dir = data_dir
-        self.github_db = os.path.join(data_dir, "github_activity.db")
-        self.twitter_db = os.path.join(data_dir, "twitter_posts_jina.db")
+        self.github_db = github_db
+        self.twitter_db = twitter_db
+        self.reddit_db = reddit_db
+        self.hackernews_db = hackernews_db
+
+        self.output_reports = "output/reports"
 
     def _query_github_data(self, days: int = 7) -> List[Dict]:
-        """
-        查询 GitHub 数据
-
-        Args:
-            days: 查询最近多少天的数据
-
-        Returns:
-            活动列表
-        """
+        """查询 GitHub 数据"""
         conn = sqlite3.connect(self.github_db)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        since = datetime.now() - timedelta(days=days * 2)  # 扩大时间范围
+        since = datetime.now() - timedelta(days=days * 2)
 
         cursor.execute('''
             SELECT * FROM github_activity
@@ -49,16 +50,54 @@ class ReportGenerator:
 
         return [dict(row) for row in rows]
 
+    def _query_reddit_data(self, days: int = 7) -> List[Dict]:
+        """查询 Reddit 数据"""
+        if not os.path.exists(self.reddit_db):
+            return []
+
+        conn = sqlite3.connect(self.reddit_db)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        since = datetime.now() - timedelta(days=days * 2)
+
+        cursor.execute('''
+            SELECT * FROM reddit_posts
+            WHERE timestamp >= ?
+            ORDER BY timestamp DESC
+            LIMIT 100
+        ''', (since,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
+    def _query_hackernews_data(self, days: int = 7) -> List[Dict]:
+        """查询 Hacker News 数据"""
+        if not os.path.exists(self.hackernews_db):
+            return []
+
+        conn = sqlite3.connect(self.hackernews_db)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        since = datetime.now() - timedelta(days=days * 2)
+
+        cursor.execute('''
+            SELECT * FROM hacker_news
+            WHERE timestamp >= ? AND ai_related = 1
+            ORDER BY timestamp DESC
+            LIMIT 50
+        ''', (since,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
     def _query_twitter_data(self, days: int = 7) -> List[Dict]:
-        """
-        查询 Twitter 数据
-
-        Args:
-            days: 查询最近多少天的数据
-
-        Returns:
-            推文列表
-        """
+        """查询 Twitter 数据"""
         if not os.path.exists(self.twitter_db):
             return []
 
@@ -72,7 +111,7 @@ class ReportGenerator:
             SELECT * FROM twitter_posts
             WHERE timestamp >= ?
             ORDER BY timestamp DESC
-            LIMIT 100
+            LIMIT 50
         ''', (since,))
 
         rows = cursor.fetchall()
@@ -80,12 +119,15 @@ class ReportGenerator:
 
         return [dict(row) for row in rows]
 
-    def generate_activity_summary(self, github_data: List[Dict], twitter_data: List[Dict]) -> Dict:
+    def generate_activity_summary(self, github_data: List[Dict], reddit_data: List[Dict],
+                                hackernews_data: List[Dict], twitter_data: List[Dict]) -> Dict:
         """
         生成活动摘要
 
         Args:
             github_data: GitHub 数据
+            reddit_data: Reddit 数据
+            hackernews_data: Hacker News 数据
             twitter_data: Twitter 数据
 
         Returns:
@@ -93,6 +135,8 @@ class ReportGenerator:
         """
         summary = {
             'github_total': len(github_data),
+            'reddit_total': len(reddit_data),
+            'hackernews_total': len(hackernews_data),
             'twitter_total': len(twitter_data),
             'github_by_type': {},
             'github_by_repo': {},
@@ -111,7 +155,7 @@ class ReportGenerator:
             summary['github_by_repo'][repo_name] = \
                 summary['github_by_repo'].get(repo_name, 0) + 1
 
-        # 时间线（最新 10 条）
+        # 时间线（最新 20 条）
         all_activities = []
 
         for activity in github_data[:10]:
@@ -125,11 +169,33 @@ class ReportGenerator:
                 'timestamp': activity.get('timestamp', '')
             })
 
-        for tweet in twitter_data[:10]:
+        for post in reddit_data[:5]:
+            all_activities.append({
+                'source': 'reddit',
+                'type': 'post',
+                'repo': post.get('subreddit', 'unknown'),
+                'author': post.get('author', 'unknown'),
+                'description': post.get('title', '')[:100],
+                'url': post.get('url', ''),
+                'timestamp': post.get('timestamp', '')
+            })
+
+        for story in hackernews_data[:5]:
+            all_activities.append({
+                'source': 'hackernews',
+                'type': 'story',
+                'repo': 'hackernews',
+                'author': story.get('author', 'unknown'),
+                'description': story.get('title', '')[:100],
+                'url': story.get('url', ''),
+                'timestamp': story.get('timestamp', ''),
+            })
+
+        for tweet in twitter_data[:5]:
             all_activities.append({
                 'source': 'twitter',
                 'type': 'tweet',
-                'repo': tweet.get('company', 'unknown'),
+                'repo': tweet.get('handle', 'unknown'),
                 'author': tweet.get('handle', 'unknown'),
                 'description': tweet.get('content', '')[:100],
                 'url': tweet.get('url', ''),
@@ -138,16 +204,19 @@ class ReportGenerator:
 
         # 按时间排序
         all_activities.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        summary['timeline'] = all_activities[:10]
+        summary['timeline'] = all_activities[:20]
 
         return summary
 
-    def generate_markdown_report(self, summary: Dict) -> str:
+    def generate_markdown_report(self, summary: Dict, include_reddit: bool = False,
+                            include_hackernews: bool = False) -> str:
         """
         生成 Markdown 格式的报告
 
         Args:
             summary: 活动摘要
+            include_reddit: 是否包含 Reddit 数据
+            include_hackernews: 是否包含 Hacker News 数据
 
         Returns:
             Markdown 字符串
@@ -169,7 +238,17 @@ class ReportGenerator:
         for activity_type, count in summary['github_by_type'].items():
             report += f"  - {activity_type}: {count} 条\n"
 
-        report += f"""
+        if include_reddit:
+            report += f"""
+### Reddit 活动
+- **总计：** {summary['reddit_total']} 条
+
+### Hacker News 活动
+- **总计：** {summary['hackernews_total']} 条
+"""
+
+        if include_hackernews:
+            report += f"""
 ### Twitter 活动
 - **总计：** {summary['twitter_total']} 条
 
@@ -186,11 +265,18 @@ class ReportGenerator:
         report += """
 ---
 
-## 🕐 最新活动（Top 10）
+## 🕐 最新活动（Top 20）
 
 """
         for i, activity in enumerate(summary['timeline'], 1):
-            emoji = '📊' if activity['source'] == 'github' else '📱'
+            emoji_map = {
+                'github': '📊',
+                'reddit': '📱',
+                'hackernews': '🕶️',
+                'twitter': '🐦'
+            }
+            emoji = emoji_map.get(activity['source'], '📋')
+
             report += f"{i}. {emoji} **{activity.get('repo', 'Unknown')}**\n"
             report += f"   - **类型：** {activity.get('type', 'Unknown')}\n"
             report += f"   - **作者：** {activity.get('author', 'Unknown')}\n"
@@ -212,9 +298,16 @@ class ReportGenerator:
    - 收集到 commits, issues, pull requests
    - 数据质量良好
 
-2. **Twitter 数据**
-   - 使用 jina-cli 框架就绪
-   - 等待数据源接入
+2. **其他数据源**
+"""
+
+        if include_reddit:
+            report += f"   - Reddit 收集器就绪\n"
+
+        if include_hackernews:
+            report += f"   - Hacker News 收集器就绪\n"
+
+        report += """   - Twitter 框架就绪（使用 jina-cli）
 
 ### 下一步
 
@@ -238,7 +331,17 @@ class ReportGenerator:
 **Twitter：**
 - 工具: jina-cli v1.0.2
 - API: Jina AI Reader (免费）
-- 状态: 🔄 框架就绪，等待数据
+- 状态: ✅ 框架就绪
+
+**Reddit：**
+- 工具: Requests (公开 API）
+- API: Reddit JSON 接口
+- 状态: {"✅ 框架就绪" if include_reddit else "⚠️ 未启用"}
+
+**Hacker News：**
+- 工具: Requests (公开 API）
+- API: Hacker News API
+- 状态: {"✅ 框架就绪" if include_hackernews else "⚠️ 未启用"}
 
 ### 数据存储
 
@@ -246,6 +349,16 @@ class ReportGenerator:
 - 文件: {self.github_db}
 - 格式: SQLite
 - 记录: {summary['github_total']} 条
+
+**Reddit：**
+- 文件: {self.reddit_db}
+- 格式: SQLite
+- 记录: {summary['reddit_total']} 条
+
+**Hacker News：**
+- 文件: {self.hackernews_db}
+- 格式: SQLite
+- 记录: {summary['hackernews_total']} 条
 
 **Twitter：**
 - 文件: {self.twitter_db}
@@ -270,12 +383,42 @@ class ReportGenerator:
 
         return report
 
-    def generate_report(self, days: int = 7) -> str:
+    def generate_activity_summary_for_auto(self, github_data: List[Dict], reddit_data: List[Dict],
+                                hackernews_data: List[Dict], twitter_data: List[Dict]) -> Dict:
+        """
+        生成简化版活动摘要（用于自动化推送）
+
+        Args:
+            github_data: GitHub 数据
+            reddit_data: Reddit 数据
+            hackernews_data: Hacker News 数据
+            twitter_data: Twitter 数据
+
+        Returns:
+            简化摘要字典
+        """
+        return {
+            'github_total': len(github_data),
+            'reddit_total': len(reddit_data),
+            'hackernews_total': len(hackernews_data),
+            'twitter_total': len(twitter_data),
+            'duration': 0,
+            'github_total': len(github_data),
+            'reddit_total': len(reddit_data),
+            'hackernews_total': len(hackernews_data),
+            'twitter_total': len(twitter_data)
+        }
+
+    def generate_report(self, days: int = 7, include_reddit: bool = False,
+                    include_hackernews: bool = False, for_auto: bool = False) -> str:
         """
         生成完整报告
 
         Args:
             days: 生成最近多少天的报告
+            include_reddit: 是否包含 Reddit 数据
+            include_hackernews: 是否包含 Hacker News 数据
+            for_auto: 是否用于自动化推送
 
         Returns:
             Markdown 报告内容
@@ -284,34 +427,67 @@ class ReportGenerator:
 
         # 查询数据
         github_data = self._query_github_data(days)
+        reddit_data = self._query_reddit_data(days) if include_reddit else []
+        hackernews_data = self._query_hackernews_data(days) if include_hackernews else []
         twitter_data = self._query_twitter_data(days)
 
         # 生成摘要
-        summary = self.generate_activity_summary(github_data, twitter_data)
+        if for_auto:
+            summary = self.generate_activity_summary_for_auto(
+                github_data, reddit_data, hackernews_data, twitter_data
+            )
+        else:
+            summary = self.generate_activity_summary(
+                github_data, reddit_data, hackernews_data, twitter_data
+            )
 
         # 生成 Markdown 报告
-        report = self.generate_markdown_report(summary)
+        if for_auto:
+            # 简化报告（用于 Telegram 推送）
+            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+            report = f"""
+<b>📊 Silicon Valley Alpha Radar - 每日报告</b>
+
+📅 <b>报告时间:</b> {now}
+
+📈 <b>数据概览:</b>
+• GitHub: {summary['github_total']} 条
+• Reddit: {summary['reddit_total']} 条
+• Hacker News: {summary['hackernews_total']} 条
+• Twitter: {summary['twitter_total']} 条
+
+<b>⏱️ 收集耗时:</b> {summary.get('duration', 0):.1f} 秒
+
+---
+<i>💡 信息不对称是终极力量。保持优势！</i>
+"""
+        else:
+            report = self.generate_markdown_report(
+                summary, include_reddit=include_reddit, include_hackernews=include_hackernews
+            )
 
         print(f"✅ 报告生成完成！")
 
         return report
 
-    def save_report(self, report: str) -> str:
+    def save_report(self, report: str, filename: Optional[str] = None) -> str:
         """
         保存报告到文件
 
         Args:
             report: Markdown 报告内容
+            filename: 输出文件名（可选）
 
         Returns:
             报告文件路径
         """
-        output_dir = "output/reports"
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(self.output_reports, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"sv_alpha_radar_report_{timestamp}.md"
-        filepath = os.path.join(output_dir, filename)
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"sv_alpha_radar_report_{timestamp}.md"
+
+        filepath = os.path.join(self.output_reports, filename)
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(report)
@@ -319,6 +495,27 @@ class ReportGenerator:
         print(f"✅ 报告已保存到: {filepath}")
 
         return filepath
+
+    def get_latest_report_file(self) -> Optional[str]:
+        """
+        获取最新的报告文件
+
+        Returns:
+            最新报告文件路径，如果不存在则返回 None
+        """
+        if not os.path.exists(self.output_reports):
+            return None
+
+        # 获取所有 Markdown 报告文件
+        import glob
+        report_files = glob.glob(os.path.join(self.output_reports, "sv_alpha_radar_report_*.md"))
+
+        if not report_files:
+            return None
+
+        # 按修改时间排序，返回最新的
+        latest_report = max(report_files, key=os.path.getmtime)
+        return latest_report
 
 
 def main():
@@ -329,7 +526,11 @@ def main():
         description="Silicon Valley Alpha Radar - 报告生成"
     )
     parser.add_argument('--days', type=int, default=7, help="生成最近多少天的报告 (默认: 7)")
-    parser.add_argument('--output', type=str, help="输出文件路径 (可选）")
+    parser.add_argument('--include-reddit', action='store_true', help='包含 Reddit 数据')
+    parser.add_argument('--include-hackernews', action='store_true', help='包含 Hacker News 数据')
+    parser.add_argument('--output', type=str, help='输出文件路径 (可选）')
+    parser.add_argument('--for-auto', action='store_true',
+                    help='生成简化报告（用于自动化推送）')
 
     args = parser.parse_args()
 
@@ -337,7 +538,12 @@ def main():
     generator = ReportGenerator()
 
     # 生成报告
-    report = generator.generate_report(days=args.days)
+    report = generator.generate_report(
+        days=args.days,
+        include_reddit=args.include_reddit,
+        include_hackernews=args.include_hackernews,
+        for_auto=args.for_auto
+    )
 
     # 保存报告
     if args.output:
@@ -347,13 +553,14 @@ def main():
     else:
         generator.save_report(report)
 
-    # 显示报告预览（前 20 行）
-    print("\n" + "=" * 80)
-    print("📋 报告预览（前 20 行）")
-    print("=" * 80)
-    lines = report.split('\n')[:20]
-    print('\n'.join(lines))
-    print("...")
+    # 显示报告预览（如果不是 for_auto）
+    if not args.for_auto:
+        print("\n" + "=" * 80)
+        print("📋 报告预览（前 50 行）")
+        print("=" * 80)
+        lines = report.split('\n')[:50]
+        print('\n'.join(lines))
+        print("...")
 
     return 0
 
