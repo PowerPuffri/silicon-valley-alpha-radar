@@ -14,6 +14,20 @@
       "name": "Anthropic",
       "handles": [],
       "github_repos": []
+    },
+    "reddit": {
+      "name": "Reddit",
+      "subreddits": [
+        "MachineLearning",
+        "artificial",
+        "deeplearning",
+        "singularity",
+        "ArtificialIntelligence"
+      ]
+    },
+    "hackernews": {
+      "name": "Hacker News",
+      "enabled": true
     }
   },
   "keywords": [
