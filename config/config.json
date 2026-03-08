@@ -1,0 +1,40 @@
+{
+  "monitored_accounts": {
+    "openai": {
+      "name": "OpenAI",
+      "handles": ["sama", "ilyasut", "gdb"],
+      "github_repos": ["openai/whisper", "openai/gym"]
+    },
+    "deepmind": {
+      "name": "DeepMind",
+      "handles": ["demishassabis", "mustafasuleyman"],
+      "github_repos": ["deepmind/deepmind-research", "deepmind/alphafold"]
+    },
+    "anthropic": {
+      "name": "Anthropic",
+      "handles": [],
+      "github_repos": []
+    }
+  },
+  "keywords": [
+    "AI", "neural", "attention", "bio-compute",
+    "spiking", "architecture", "AGI", "transformer",
+    "scaling laws", "emergence", "reasoning",
+    "multimodal", "agents", "reinforcement learning"
+  ],
+  "trend_detection": {
+    "min_participants": 2,
+    "max_public_likes": 100,
+    "time_window_days": 7
+  },
+  "scheduler": {
+    "daily_run_time": "00:00",
+    "timezone": "UTC"
+  },
+  "output": {
+    "report_format": "markdown",
+    "generate_ui_visualization": true,
+    "send_email": false,
+    "webhook_url": ""
+  }
+}
