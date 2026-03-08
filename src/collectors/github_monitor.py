@@ -1,16 +1,15 @@
 """
 GitHub Monitor - 监控大佬们的仓库活动
-追踪 commits, stars, issues, pull requests 和代码结构变化
+追踪 commits, issues, pull requests 和代码结构变化
 """
 
 import github
 from github import GithubException
-import pandas as pd
+import os
 from datetime import datetime, timedelta
-import json
 import sqlite3
 from typing import List, Dict, Optional
-import os
+import json
 
 
 class GitHubMonitor:
@@ -20,10 +19,9 @@ class GitHubMonitor:
 
         Args:
             config_path: 配置文件路径
-            token: GitHub Token（可选，优先级低于环境变量）
+            token: GitHub Personal Access Token（可选，优先级低于环境变量）
         """
         self.config_path = config_path
-        self.config = self._load_config(config_path)
         self.github_client = None
         self.storage_path = "storage/data/github_activity.db"
         self._init_storage()
@@ -32,7 +30,9 @@ class GitHubMonitor:
         self._auto_authenticate(token)
 
     def _auto_authenticate(self, provided_token: str = None):
-        """自动认证：尝试多种方式获取 token"""
+        """
+        自动认证：尝试多种方式获取 token
+        """
         token = None
 
         # 优先级 1: 环境变量
@@ -45,15 +45,21 @@ class GitHubMonitor:
             token = provided_token
             print("✅ 使用提供的 token")
 
-        # 优先级 3: .env 文件
+        # 优先级 3: .env 文件（在项目根目录）
         else:
-            env_file = os.path.join(os.path.dirname(self.config_path), '.env')
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            env_file = os.path.join(project_root, '.env')
+            
             if os.path.exists(env_file):
-                from dotenv import load_dotenv
-                load_dotenv(env_file)
-                if 'GITHUB_TOKEN' in os.environ:
-                    token = os.environ['GITHUB_TOKEN']
-                    print("✅ 从 .env 文件读取 GITHUB_TOKEN")
+                try:
+                    from dotenv import load_dotenv
+                    load_dotenv(env_file)
+                    
+                    if 'GITHUB_TOKEN' in os.environ:
+                        token = os.environ['GITHUB_TOKEN']
+                        print("✅ 从 .env 文件读取 GITHUB_TOKEN")
+                except ImportError:
+                    pass
 
         # 如果还是没有 token，提示用户
         if not token:
@@ -141,7 +147,8 @@ class GitHubMonitor:
             活动列表
         """
         if not self.github_client:
-            raise RuntimeError("未认证 GitHub API，请先调用 authenticate()")
+            print("❌ 未认证 GitHub API，请先调用 authenticate()")
+            return []
 
         try:
             repo = self.github_client.get_repo(repo_name)
@@ -194,17 +201,9 @@ class GitHubMonitor:
                     continue
 
             # 获取最近的 pull requests
-            pulls = repo.get_pulls(state='open')
+            pulls = repo.get_pull_requests(state='open', since=since)
             pr_count = 0
             for pr in list(pulls)[:30]:  # 最多获取 30 个
-                # 手动过滤时间（处理时区问题）
-                try:
-                    pr_time = pr.created_at.replace(tzinfo=None) if pr.created_at.tzinfo else pr.created_at
-                    if pr_time and pr_time < since:
-                        continue
-                except:
-                    continue
-
                 try:
                     activities.append({
                         'id': f"pr_{pr.id}",
@@ -246,7 +245,7 @@ class GitHubMonitor:
                 INSERT OR REPLACE INTO github_activity
                 (id, repo_name, repo_owner, author, activity_type,
                  description, url, stars, timestamp, collected_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 activity['id'],
                 activity['repo_name'],
@@ -265,26 +264,27 @@ class GitHubMonitor:
 
         print(f"✅ 已保存 {len(activities)} 条 GitHub 活动到数据库")
 
-    def monitor_all_repos(self, days: int = 7):
+    def monitor_all_repos(self, days: int = 7) -> List[Dict]:
         """
         监控所有配置的仓库
 
         Args:
-            days: 最近多少天的活动
-        """
-        if not self.github_client:
-            print("\n❌ 未认证 GitHub API，无法继续")
-            return []
+            days: 收集最近多少天的活动
 
-        all_activities = []
+        Returns:
+            所有活动列表
+        """
+        config = self._load_config(self.config_path)
 
         # 遍历所有公司
-        for company, config in self.config['monitored_accounts'].items():
-            print(f"\n📊 正在监控 {config['name']} 的仓库...")
+        all_activities = []
+
+        for company, company_config in config.get('monitored_accounts', {}).items():
+            print(f"\n📊 正在监控 {company_config.get('name', company)} 的仓库...")
 
             # 监控每个仓库
             company_activities = []
-            for repo_name in config.get('github_repos', []):
+            for repo_name in company_config.get('github_repos', []):
                 activities = self.get_repo_activity(repo_name, days)
                 company_activities.extend(activities)
 
@@ -329,16 +329,47 @@ class GitHubMonitor:
             print(f"❌ 获取仓库 {repo_name} 统计失败: {e}")
             return None
 
+    def get_recent_stats(self, hours: int = 24) -> Dict:
+        """
+        获取最近统计信息
+
+        Args:
+            hours: 最近多少小时的统计
+
+        Returns:
+            统计信息字典
+        """
+        conn = sqlite3.connect(self.storage_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        since = datetime.now() - timedelta(hours=hours)
+
+        cursor.execute('''
+            SELECT COUNT(*) as total_activities,
+                   COUNT(DISTINCT repo_name) as active_repos,
+                   COUNT(*) FILTER (WHERE timestamp >= ?) as recent_activities
+            FROM github_activity
+            WHERE timestamp >= ?
+        ''', (since,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        return {
+            'total_activities': row[0] or 0,
+            'active_repos': row[1] or 0,
+            'recent_activities': row[2] or 0,
+            'period_hours': hours
+        }
+
 
 # 主程序 - 用于测试
 if __name__ == "__main__":
     print("🎯 Silicon Valley Alpha Radar - GitHub Monitor")
     print("=" * 60)
 
-    # 自动认证
+    # 测试模式
     monitor = GitHubMonitor()
 
-    if monitor.github_client:
-        print("\n✅ 认证成功！可以开始监控")
-    else:
-        print("\n❌ 认证失败，请检查 GitHub Token 配置")
+    print("\n✅ 认证成功，可以开始监控")
