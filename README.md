@@ -40,20 +40,20 @@ Silicon Valley Alpha Radar 是一个智能信息收集和推送系统，专注�
 
 ```mermaid
 graph TD
-    subgraph "数据收集层 (Collectors)"
+    subgraph 数据收集层
         A[官方博客] --> DB[(SQLite DB)]
         B[GitHub API] --> DB
-        C[Twitter (Jina)] --> DB
-        D[Hacker News] --> DB
+        C[Twitter Jina] --> DB
+        D[HackerNews] --> DB
     end
 
-    subgraph "调度与处理 (Scheduler & Core)"
-        DB --> E[去重 & 清理]
+    subgraph 调度与处理
+        DB --> E[去重清理]
         E --> F[优先级计算]
-        F --> G[信息分级 (Info Judge)]
+        F --> G[信息分级]
     end
 
-    subgraph "推送服务 (Push Service)"
+    subgraph 推送服务
         G --> H{消息队列}
         H -->|Breaking| I[立即推送]
         H -->|Normal| J[定时汇总]
