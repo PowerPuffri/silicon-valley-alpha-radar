@@ -10,8 +10,6 @@ Silicon Valley Alpha Radar 是一个智能信息收集和推送系统，专注�
 
 **当前版本：Alpha 0.2**
 
-本项目由 **PowerPuffri** 与 openclaw 共同开发。目前处于快速迭代阶段，核心数据收集与推送框架已搭建完成。
-
 ### ✅ 已实现功能
 - **多源数据收集**：
   - 🟢 **官方博客**：OpenAI, Anthropic, DeepMind, Google AI, Meta AI (基于 RSS/网页解析)
@@ -195,14 +193,6 @@ python src/services/unified_push_service.py --status
 | **P1: GitHub Release** | 85 | openai/gpt-4, pytorch/pytorch |
 | **P1: Key Person** | 80 | @sama, @karpathy |
 | **P2: Community** | 20 | Hacker News, Reddit (LocalLLaMA) |
-
----
-
-## 📞 联系与反馈
-
-- **开发者**: PowerPuffri
-- **协作 AI**: openclaw
-- **反馈**: 请提交 Issue 或通过相关渠道联系。
 
 ---
 
