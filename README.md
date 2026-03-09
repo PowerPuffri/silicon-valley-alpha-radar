@@ -1,282 +1,209 @@
 # 🎯 Silicon Valley Alpha Radar
 
-监控 AI 界顶级大佬的"隐性共识"和潜在趋势，发现信息不对称优势。
+> **监控 AI 界顶级大佬的"隐性共识"和潜在趋势，发现信息不对称优势。**
+
+Silicon Valley Alpha Radar 是一个智能信息收集和推送系统，专注于追踪硅谷顶级 AI 实验室（OpenAI、Anthropic、DeepMind）及关键人物的最新动态，并通过 Telegram 实时推送结构化情报。
 
 ---
 
-## 📋 项目介绍
+## 🚀 项目状态
 
-这是一个自动化监控系统，用于追踪 OpenAI、DeepMind 和 Anthropic 等顶级 AI 公司关键人物的社交媒体动态和代码活动，识别低关注度的内行讨论和早期趋势信号。
+**当前版本：Alpha 0.2**
 
-### 🎯 核心目标
+本项目由 **PowerPuffri** 与 openclaw 共同开发。目前处于快速迭代阶段，核心数据收集与推送框架已搭建完成。
 
-1. **数据收集**：监控大佬们的 X (Twitter) 推文和 GitHub 仓库活动
-2. **趋势分析**：检测"隐性共识" - 多人私下讨论但公开关注度低的话题
-3. **报告生成**：生成每日趋势报告，包含关键信号和洞察
-4. **可视化**：展示趋势热度图、参与者网络图
+### ✅ 已实现功能
+- **多源数据收集**：
+  - 🟢 **官方博客**：OpenAI, Anthropic, DeepMind, Google AI, Meta AI (基于 RSS/网页解析)
+  - 📦 **GitHub**：监控指定组织的 Releases 和仓库动态
+  - 🐦 **Twitter/X**：官方账号及关键人物（@sama, @karpathy 等）监控 (基于 Jina CLI，实验性)
+- **智能调度系统**：
+  - 支持后台守护进程 (`--daemon`)，默认每 6 小时自动执行收集
+  - 每日定时（09:00）发送日报
+  - 自动去重与过期数据清理
+- **推送服务**：
+  - **Telegram Bot** 集成
+  - 支持 **BREAKING** (紧急) / **Summary** (汇总) 多种消息格式
+  - 消息分级队列管理 (Urgent/Hourly/Normal)
+
+### 🚧 开发中/待优化
+- Twitter 数据收集的稳定性（依赖 Jina CLI，受限于反爬策略）
+- Hacker News & Reddit 数据源的深度整合
+- 统一数据库架构的合并 (`collected_articles.db` vs `unified_activities.db`)
+- 完整的语义分析与“隐性共识”检测算法
 
 ---
 
-## 🚀 快速开始
+## 🛠️ 技术架构
 
-### 1. 安装依赖
+系统分为 **数据收集层**、**调度层** 和 **推送服务层**。
+
+```mermaid
+graph TD
+    subgraph "数据收集层 (Collectors)"
+        A[官方博客] --> DB[(SQLite DB)]
+        B[GitHub API] --> DB
+        C[Twitter (Jina)] --> DB
+        D[Hacker News] --> DB
+    end
+
+    subgraph "调度与处理 (Scheduler & Core)"
+        DB --> E[去重 & 清理]
+        E --> F[优先级计算]
+        F --> G[信息分级 (Info Judge)]
+    end
+
+    subgraph "推送服务 (Push Service)"
+        G --> H{消息队列}
+        H -->|Breaking| I[立即推送]
+        H -->|Normal| J[定时汇总]
+        I --> K[Telegram Bot]
+        J --> K
+    end
+```
+
+---
+
+## 📂 项目结构
+
+```text
+silicon-valley-alpha-radar/
+├── config/
+│   ├── config.json             # 主配置文件 (Telegram Token等)
+│   ├── data_sources_config.py  # 数据源与优先级定义
+│   └── push_config.json        # 推送策略配置
+├── docs/                       # 使用指南、数据文档、项目报告
+├── src/
+│   ├── collectors/             # 核心数据收集模块
+│   │   ├── official_blog_collector.py
+│   │   ├── github_release_collector.py
+│   │   └── ...
+│   ├── services/               # 服务层 (Unified Push)
+│   ├── queues/                 # 消息队列管理
+│   └── judges/                 # 信息价值判断逻辑
+├── storage/                    # 数据库存储
+├── scheduler.py                # 🚀 主调度程序 (入口)
+├── collect_all_sources.py      # 数据收集脚本
+├── collect_twitter.py          # Twitter 收集脚本
+├── startup_test.py             # 环境自检脚本
+├── test_full_push_mechanism.py # 推送机制全链路验证
+├── legacy/                     # 历史实验脚本归档（不参与主流程）
+└── requirements.txt            # Python 依赖
+```
+
+---
+
+## 当前版本说明
+
+当前版本以“稳定运行”为目标，目录与入口已经统一为主流程优先。
+
+### ✅ 当前推荐入口
+- `python scheduler.py`（标准采集与推送流程）
+- `python scheduler.py --daemon`（后台持续运行）
+- `python src/services/unified_push_service.py --start`（统一推送服务）
+
+### 📦 目录分层
+- `src/`：核心业务代码（collectors / services / queues / judges）
+- `config/`：运行配置与策略配置
+- `docs/`：使用指南、数据文档、架构与发布文档
+- `legacy/`：历史脚本归档（不参与当前主流程）
+
+### 🔒 维护原则
+- 新功能优先在 `src/` 下模块化实现
+- 根目录仅保留主入口与必要运行文件
+- 历史脚本统一放在 `legacy/`，避免影响主流程可读性
+
+## 📚 文档导航
+
+- `docs/guides/`：安装、快速开始、服务说明、API 配置
+- `docs/data/`：数据源设计与真实数据说明
+- `docs/architecture/`：推送机制架构文档
+- `docs/project/`：阶段进展与项目笔记
+- `docs/release/`：发布与上传说明
+
+## ⚡ 快速开始
+
+### 1. 环境准备
 
 ```bash
+# 克隆仓库
+git clone https://github.com/PowerPuffri/silicon-valley-alpha-radar.git
 cd silicon-valley-alpha-radar
+
+# 创建并激活虚拟环境
+python -m venv venv
+source venv/bin/activate  # Mac/Linux
+# venv\Scripts\activate   # Windows
+
+# 安装依赖
 pip install -r requirements.txt
 ```
 
-### 2. 配置 API 密钥
+### 2. 配置文件
 
-#### Twitter API
-- 获取 Twitter API Key, Secret 和 Bearer Token
-- 设置环境变量：
-  ```bash
-  export TWITTER_API_KEY="your_api_key"
-  export TWITTER_API_SECRET="your_api_secret"
-  export TWITTER_BEARER_TOKEN="your_bearer_token"
-  ```
-
-#### GitHub API
-- 获取 GitHub Personal Access Token
-- 设置环境变量：
-  ```bash
-  export GITHUB_TOKEN="your_github_token"
-  ```
-
-### 3. 运行数据收集
-
-```bash
-# 收集所有数据源（Twitter + GitHub）
-python orchestrator.py --days 7
-
-# 只收集 Twitter 数据
-python orchestrator.py --days 7 --twitter-only
-
-# 只收集 GitHub 数据
-python orchestrator.py --days 7 --github-only
-
-# 查看最近统计
-python orchestrator.py --stats
-```
-
----
-
-## 📁 项目结构
-
-```
-silicon-valley-alpha-radar/
-├── src/
-│   ├── collectors/          # 数据收集器
-│   │   ├── twitter_collector.py  # Twitter 推文收集
-│   │   └── github_monitor.py     # GitHub 仓库监控
-│   ├── analyzers/            # 分析引擎（开发中）
-│   │   ├── trend_detector.py      # 趋势检测
-│   │   ├── semantic_analyzer.py    # 语义分析
-│   │   └── consensus_finder.py     # 共识检测
-│   ├── generators/           # 报告生成器（开发中）
-│   │   ├── report_generator.py    # 报告生成
-│   │   └── ui_visualizer.py       # UI 可视化
-│   └── orchestrator.py       # 数据编排器
-├── storage/                 # 数据存储
-│   ├── data/                # 原始数据
-│   └── processed/            # 处理后的数据
-├── config/                  # 配置文件
-│   └── config.json          # 监控配置
-├── output/                  # 输出报告
-│   └── reports/             # 生成的报告
-├── requirements.txt         # Python 依赖
-├── orchestrator.py         # 主程序
-└── README.md                # 项目说明
-```
-
----
-
-## ⚙️ 配置说明
-
-### config.json
+复制 `config/config.json` 并填入你的 Telegram Bot 信息：
 
 ```json
 {
-  "monitored_accounts": {
-    "openai": {
-      "name": "OpenAI",
-      "handles": ["sama", "ilyasut", "gdb"],
-      "github_repos": ["openai/gpt-4", "openai/whisper"]
-    },
-    "deepmind": {
-      "name": "DeepMind",
-      "handles": ["demishassabis", "mustafasuleyman"],
-      "github_repos": ["deepmind/deepmind-research"]
-    },
-    "anthropic": {
-      "name": "Anthropic",
-      "github_repos": ["anthropic/anthropic"]
-    }
+  "telegram": {
+    "botToken": "YOUR_BOT_TOKEN",
+    "chatId": "YOUR_CHAT_ID"
   },
-  "keywords": [
-    "AI", "neural", "attention", "bio-compute",
-    "spiking", "architecture", "AGI"
-  ],
-  "trend_detection": {
-    "min_participants": 2,
-    "max_public_likes": 100,
-    "time_window_days": 7
+  "twitter": {
+    "enabled": true
   }
 }
 ```
 
----
+### 3. 运行系统
 
-## 🔧 功能模块
-
-### 1. Twitter Collector (✅ 已完成)
-- 监控指定 Twitter 账号的推文
-- 关键词过滤
-- 低关注度检测（likes < 100）
-- SQLite 数据存储
-
-### 2. GitHub Monitor (✅ 已完成)
-- 监控指定 GitHub 仓库的活动
-- 追踪 commits, issues, pull requests
-- 仓库统计信息收集
-- SQLite 数据存储
-
-### 3. Semantic Analyzer (🚧 开发中)
-- 使用 OpenAI Embeddings 进行语义分析
-- 向量化和相似度计算
-- 话题聚类分析
-
-### 4. Report Generator (🚧 开发中)
-- Markdown 格式报告生成
-- 趋势总结和关键信号
-- 信息不对称洞察
-
----
-
-## 📊 数据流
-
-```
-00:00 UTC 定时任务触发
-    ↓
-[数据收集阶段]
-    ├── Twitter Collector → 收集 7 天内推文
-    └── GitHub Monitor → 监控仓库活动
-    ↓
-[数据存储阶段]
-    └── 存储到 SQLite 数据库
-    ↓
-[分析阶段 - 开发中]
-    ├── Semantic Analyzer → 语义聚类
-    └── Trend Detector → 检测隐性趋势
-    ↓
-[报告生成阶段 - 开发中]
-    └── Report Generator → 生成 Markdown 报告
-    ↓
-[输出阶段]
-    └── 保存报告到 output/reports/
-```
-
----
-
-## 🔑 核心概念
-
-### 隐性共识 (Hidden Consensus)
-
-定义：多个大佬私下讨论的话题或技术方向，但公开关注度低。
-
-**特征：**
-- 参与人数 >= 2
-- 公开关注度低（likes < 100）
-- 讨论深度高（Issue 评论数、代码提交活跃）
-
-### 信息不对称 (Information Asymmetry)
-
-定义：内行人员掌握的信息，普通开发者通过公开渠道无法获取。
-
-**价值：**
-- 建立早期情报网络
-- 超越纯代码工作的优势
-- 发现未被广泛注意的技术趋势
-
----
-
-## 🎯 实施计划
-
-### Phase 1: MVP (✅ 完成)
-- ✅ Twitter 数据收集
-- ✅ GitHub 仓库监控
-- ✅ 基础数据存储
-- ✅ 数据编排器
-
-### Phase 2: 核心功能 (🚧 进行中)
-- 🔄 语义分析引擎
-- 🔄 趋势检测算法
-- 🔄 共识检测器
-
-### Phase 3: 高级功能 (📋 规划中)
-- 📋 自动定时任务
-- 📋 报告生成器
-- 📋 UI 可视化
-
-### Phase 4: 优化和扩展 (📋 规划中)
-- 📋 Web Dashboard
-- 📋 邮件/Webhook 通知
-- 📋 添加更多监控目标
-
----
-
-## 📈 使用示例
-
-### 基础数据收集
+#### 方式 A：标准调度模式 (推荐)
+包含完整的收集、去重、推送流程。
 
 ```bash
-# 收集最近 7 天的数据
-python orchestrator.py --days 7
+# 单次运行（收集 + 推送）
+python scheduler.py
+
+# 后台守护模式（每 6 小时自动运行）
+python scheduler.py --daemon
+
+# 仅执行数据收集
+python scheduler.py --collect
 ```
 
-### 查看统计信息
+#### 方式 B：统一推送服务模式
+适用于基于队列和优先级的持续推送服务。
 
 ```bash
-# 显示最近 24 小时的统计
-python orchestrator.py --stats
-```
+# 启动持续监控服务
+python src/services/unified_push_service.py --start
 
-### 单独收集 Twitter 数据
-
-```bash
-python orchestrator.py --days 7 --twitter-only
+# 查看队列状态
+python src/services/unified_push_service.py --status
 ```
 
 ---
 
-## ⚠️ 注意事项
+## 📊 数据源与优先级
 
-1. **API 限制**：Twitter 和 GitHub API 都有速率限制，需要合理设置
-2. **隐私合规**：只公开可获取的数据，不涉及个人隐私
-3. **数据准确性**：隐性共识检测算法需要持续优化
-4. **网络依赖**：需要稳定的网络连接来访问 API
+系统根据来源权威性和时效性计算优先级 (Priority Score)：
 
----
-
-## 🚧 待办事项
-
-- [ ] 实现语义分析引擎（OpenAI Embeddings）
-- [ ] 实现趋势检测算法（DBSCAN 聚类）
-- [ ] 实现报告生成器（Markdown 模板）
-- [ ] 实现 UI 可视化（趋势图、网络图）
-- [ ] 实现定时任务调度（00:00 UTC）
-- [ ] 添加邮件/Webhook 通知
-- [ ] 创建 Web Dashboard
-- [ ] 优化隐性共识检测算法
-- [ ] 添加更多监控目标和关键词
+| 来源类型 | 权重 | 示例 |
+|---------|------|------|
+| **P0: Official Blog** | 100 | OpenAI Blog, Anthropic Research |
+| **P0: Official X** | 90 | @OpenAI, @DeepMind |
+| **P1: GitHub Release** | 85 | openai/gpt-4, pytorch/pytorch |
+| **P1: Key Person** | 80 | @sama, @karpathy |
+| **P2: Community** | 20 | Hacker News, Reddit (LocalLLaMA) |
 
 ---
 
-## 📞 联系
+## 📞 联系与反馈
 
-如需帮助或有问题，请通过 WhatsApp 联系。
+- **开发者**: PowerPuffri
+- **协作 AI**: openclaw
+- **反馈**: 请提交 Issue 或通过相关渠道联系。
 
 ---
 
-_**💡 信息不对称是终极力量。超级开发者通过建立信息网络而不是只写代码来获得优势。**_
+> _"Information asymmetry is the ultimate leverage."_
