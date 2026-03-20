@@ -16,9 +16,10 @@ from collect_all_sources import (
     collect_blog,
     collect_github,
     DATA_SOURCES,
-    GITHUB_ORGS,
-    DB_PATH
+    GITHUB_ORGS
 )
+
+DB_PATH = "storage/data/collected_articles.db"
 import sqlite3
 import requests
 import json
@@ -220,16 +221,23 @@ def run_daemon():
     print("🤖 SV Alpha Radar 调度器启动")
     print("=" * 60)
     print(f"📅 调度计划:")
-    print(f"   • 每 6 小时收集一次")
+    print(f"   • 每天 00:00, 06:00, 12:00, 18:00 收集一次")
     print(f"   • 每天 09:00 推送日报")
     print("=" * 60)
 
+    # 定时任务
+    schedule.every().day.at("00:00").do(run_collection_job)
+    schedule.every().day.at("06:00").do(run_collection_job)
+    schedule.every().day.at("12:00").do(run_collection_job)
+    schedule.every().day.at("18:00").do(run_collection_job)
+    schedule.every().day.at("09:00").do(run_collection_job)
+
+    print("\n📋 当前任务队列及下次执行时间:")
+    for job in schedule.get_jobs():
+        print(f"   • 任务: {job} | 下次执行: {job.next_run}")
+
     # 首次运行
     run_collection_job()
-
-    # 定时任务
-    schedule.every(6).hours.do(run_collection_job)
-    schedule.every().day.at("09:00").do(run_collection_job)
 
     print("\n🔄 调度器运行中... (Ctrl+C 停止)")
 

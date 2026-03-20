@@ -45,6 +45,10 @@
     "daily_run_time": "00:00",
     "timezone": "UTC"
   },
+  "telegram": {
+    "botToken": "8729905169:AAFy3zOHkD84JgtWg0Zmt4Bo7UNlGyQUstM",
+    "chatId": "7974510481"
+  },
   "output": {
     "report_format": "markdown",
     "generate_ui_visualization": true,

@@ -81,11 +81,9 @@ silicon-valley-alpha-radar/
 │   └── judges/                 # 信息价值判断逻辑
 ├── storage/                    # 数据库存储
 ├── scheduler.py                # 🚀 主调度程序 (入口)
-├── collect_all_sources.py      # 数据收集脚本
+├── collect_all_sources.py      # 数据收集核心脚本
 ├── collect_twitter.py          # Twitter 收集脚本
-├── startup_test.py             # 环境自检脚本
-├── test_full_push_mechanism.py # 推送机制全链路验证
-├── legacy/                     # 历史实验脚本归档（不参与主流程）
+├── legacy/                     # 历史实验与测试脚本归档（不参与主流程）
 └── requirements.txt            # Python 依赖
 ```
 

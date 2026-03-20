@@ -17,7 +17,7 @@ from typing import List, Dict, Optional
 from urllib.parse import urlparse
 
 # 配置
-DB_PATH = "/Users/zhipu_glm/.openclaw/workspace/silicon-valley-alpha-radar/storage/data/collected_articles.db"
+DB_PATH = "storage/data/collected_articles.db"
 
 # 数据源配置
 DATA_SOURCES = {

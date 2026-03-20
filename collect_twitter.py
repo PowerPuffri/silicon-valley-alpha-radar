@@ -8,28 +8,80 @@ import subprocess
 import re
 import sqlite3
 import os
+import random
+import time
+import requests
+from html import unescape
+from email.utils import parsedate_to_datetime
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set, Tuple
 
-DB_PATH = "/Users/zhipu_glm/.openclaw/workspace/silicon-valley-alpha-radar/storage/data/collected_articles.db"
+DB_PATH = "storage/data/collected_articles.db"
+NITTER_INSTANCES = [
+    "https://nitter.net",
+    "https://nitter.privacydev.net",
+    "https://nitter.poast.org",
+    "https://nitter.1d4.us",
+]
+USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+]
 
 # Twitter 账号配置
 TWITTER_ACCOUNTS = {
     "official": {
-        "priority": 90,
+        "priority": 95,
         "accounts": [
             {"handle": "OpenAI", "name": "OpenAI"},
             {"handle": "AnthropicAI", "name": "Anthropic"},
-            {"handle": "DeepMindAI", "name": "DeepMind"},
+            {"handle": "GoogleDeepMind", "name": "Google DeepMind"},
+            {"handle": "MetaAI", "name": "Meta AI"},
+            {"handle": "MistralAI", "name": "Mistral AI"},
+            {"handle": "xai", "name": "xAI"},
+            {"handle": "NVIDIAAI", "name": "NVIDIA AI"},
+            {"handle": "huggingface", "name": "Hugging Face"},
         ]
     },
-    "key_people": {
-        "priority": 80,
+    "researchers": {
+        "priority": 88,
         "accounts": [
             {"handle": "sama", "name": "Sam Altman"},
             {"handle": "gdb", "name": "Greg Brockman"},
             {"handle": "demishassabis", "name": "Demis Hassabis"},
             {"handle": "karpathy", "name": "Andrej Karpathy"},
+            {"handle": "ylecun", "name": "Yann LeCun"},
+            {"handle": "fchollet", "name": "Francois Chollet"},
+            {"handle": "DrJimFan", "name": "Jim Fan"},
+            {"handle": "tim_dettmers", "name": "Tim Dettmers"},
+            {"handle": "SebastienBubeck", "name": "Sebastien Bubeck"},
+            {"handle": "JeffDean", "name": "Jeff Dean"},
+            {"handle": "janhestness", "name": "Jan Hestness"},
+            {"handle": "AlecRad", "name": "Alec Radford"},
+            {"handle": "JohnSchulman2", "name": "John Schulman"},
+        ]
+    },
+    "builders": {
+        "priority": 82,
+        "accounts": [
+            {"handle": "ClementDelangue", "name": "Clement Delangue"},
+            {"handle": "hwchase17", "name": "Harrison Chase"},
+            {"handle": "swyx", "name": "Shawn Wang"},
+            {"handle": "simonw", "name": "Simon Willison"},
+            {"handle": "natfriedman", "name": "Nat Friedman"},
+            {"handle": "perplexity_ai", "name": "Perplexity"},
+            {"handle": "LangChainAI", "name": "LangChain"},
+            {"handle": "vllm_project", "name": "vLLM"},
+        ]
+    },
+    "watchers": {
+        "priority": 75,
+        "accounts": [
+            {"handle": "emollick", "name": "Ethan Mollick"},
+            {"handle": "ArvindNarayanan", "name": "Arvind Narayanan"},
+            {"handle": "aidan_mclau", "name": "Aidan McLaughlin"},
+            {"handle": "NathanBenaich", "name": "Nathan Benaich"},
         ]
     }
 }
@@ -51,6 +103,52 @@ def run_jina_read(url: str) -> Optional[str]:
         return None
 
 
+def _format_date(pub_date: str) -> str:
+    try:
+        return parsedate_to_datetime(pub_date).strftime('%b %d')
+    except Exception:
+        return datetime.now().strftime('%b %d')
+
+
+def run_nitter_read(handle: str, max_items: int = 6) -> Optional[str]:
+    headers = {"User-Agent": random.choice(USER_AGENTS)}
+    for base in random.sample(NITTER_INSTANCES, len(NITTER_INSTANCES)):
+        rss_url = f"{base}/{handle}/rss"
+        try:
+            resp = requests.get(rss_url, headers=headers, timeout=12)
+            if resp.status_code != 200 or "<item>" not in resp.text:
+                continue
+            items = re.findall(r"<item>(.*?)</item>", resp.text, re.S)
+            if not items:
+                continue
+            lines: List[str] = []
+            count = 0
+            for item in items:
+                title_match = re.search(r"<title>(.*?)</title>", item, re.S)
+                link_match = re.search(r"<link>(.*?)</link>", item, re.S)
+                date_match = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
+                if not title_match or not link_match:
+                    continue
+                title = unescape(title_match.group(1)).strip()
+                link = unescape(link_match.group(1)).strip()
+                link = re.sub(r"^https?://[^/]+", "https://x.com", link)
+                sid_match = re.search(r"/status/(\d+)", link)
+                if not sid_match:
+                    continue
+                date_str = _format_date(date_match.group(1).strip()) if date_match else datetime.now().strftime('%b %d')
+                lines.append(f"[{date_str}]({link})")
+                lines.append(title)
+                lines.append("")
+                count += 1
+                if count >= max_items:
+                    break
+            if lines:
+                return "\n".join(lines)
+        except Exception:
+            continue
+    return None
+
+
 def extract_tweets(markdown: str, handle: str) -> List[Dict]:
     """
     从 Twitter 页面提取推文
@@ -63,24 +161,28 @@ def extract_tweets(markdown: str, handle: str) -> List[Dict]:
         return []
 
     tweets = []
+    seen_urls: Set[str] = set()
     lines = markdown.split('\n')
+    status_pattern = re.compile(r'https?://(?:x|twitter)\.com/([A-Za-z0-9_]+)/status/(\d+)')
 
     i = 0
     while i < len(lines):
         line = lines[i].strip()
+        status_match = status_pattern.search(line)
 
-        # 匹配日期链接: [Mar 5](https://x.com/.../status/xxx)
-        date_match = re.search(r'\[([A-Z][a-z]{2}\s+\d+)\]\(https://x\.com/[^/]+/status/(\d+)\)', line)
-
-        if date_match:
-            date_str = date_match.group(1)
-            status_id = date_match.group(2)
-            tweet_url = f"https://x.com/{handle}/status/{status_id}"
+        if status_match:
+            source_handle = status_match.group(1)
+            status_id = status_match.group(2)
+            tweet_url = f"https://x.com/{source_handle}/status/{status_id}"
+            if tweet_url in seen_urls:
+                i += 1
+                continue
+            seen_urls.add(tweet_url)
 
             # 收集后续行的文本
             tweet_text = ""
             j = i + 1
-            while j < len(lines) and j < i + 10:
+            while j < len(lines) and j < i + 14:
                 next_line = lines[j].strip()
 
                 # 跳过空行
@@ -100,9 +202,7 @@ def extract_tweets(markdown: str, handle: str) -> List[Dict]:
 
                 # 跳过链接
                 if next_line.startswith('[') and '](' in next_line:
-                    # 检查是否是另一个日期链接（新推文开始）
-                    new_date = re.search(r'\[([A-Z][a-z]{2}\s+\d+)\]\(https://x\.com/[^/]+/status/\d+\)', next_line)
-                    if new_date:
+                    if status_pattern.search(next_line):
                         break
                     j += 1
                     continue
@@ -129,13 +229,13 @@ def extract_tweets(markdown: str, handle: str) -> List[Dict]:
                 j += 1
 
             # 清理文本
-            tweet_text = tweet_text.strip()
+            tweet_text = re.sub(r'\s+', ' ', tweet_text.strip())
 
             # 过滤太短的推文
             if len(tweet_text) > 15:
                 tweets.append({
                     'text': tweet_text[:400],
-                    'date': date_str,
+                    'date': datetime.now().strftime('%b %d'),
                     'url': tweet_url,
                     'handle': handle
                 })
@@ -143,6 +243,22 @@ def extract_tweets(markdown: str, handle: str) -> List[Dict]:
         i += 1
 
     return tweets
+
+
+def get_all_accounts() -> List[Tuple[str, Dict]]:
+    seen: Set[str] = set()
+    merged: List[Tuple[str, Dict]] = []
+    for category, config in TWITTER_ACCOUNTS.items():
+        for account in config.get('accounts', []):
+            handle = account.get('handle', '').strip()
+            if not handle:
+                continue
+            key = handle.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append((category, account))
+    return merged
 
 
 def save_tweet(tweet: Dict, account: Dict, priority: int) -> bool:
@@ -183,32 +299,40 @@ def collect_twitter():
     print("=" * 60)
 
     total = 0
+    all_accounts = get_all_accounts()
+    print(f"\n🎯 监控账号总数: {len(all_accounts)}")
 
     for category, config in TWITTER_ACCOUNTS.items():
         print(f"\n📂 {category.upper()} (优先级: {config['priority']})")
+        category_accounts = [acc for cat, acc in all_accounts if cat == category]
 
-        for account in config['accounts']:
+        for account in category_accounts:
             handle = account['handle']
             name = account['name']
             url = f"https://x.com/{handle}"
 
             print(f"  📖 @{handle} ({name})...", end='')
 
-            markdown = run_jina_read(url)
+            markdown = run_nitter_read(handle)
+            channel = "nitter"
+            if not markdown:
+                markdown = run_jina_read(url)
+                channel = "jina"
+            time.sleep(random.uniform(0.7, 1.4))
 
             if markdown:
                 tweets = extract_tweets(markdown, handle)
 
                 if tweets:
-                    print(f" 找到 {len(tweets)} 条推文")
-                    for tweet in tweets[:3]:  # 每个账号最多3条
+                    print(f" 找到 {len(tweets)} 条推文 ({channel})")
+                    for tweet in tweets[:3]:
                         if save_tweet(tweet, account, config['priority']):
                             print(f"     ✅ {tweet['text'][:50]}...")
                             total += 1
                 else:
-                    print(" ⚠️ 没有提取到推文")
+                    print(f" ⚠️ 没有提取到推文 ({channel})")
             else:
-                print(" ❌ 读取失败")
+                print(" ❌ 读取失败 (nitter+jina)")
 
     print(f"\n📊 Twitter 收集完成: {total} 条")
     return total
