@@ -30,6 +30,8 @@ venv.bak/
 # Environment Variables
 .env
 .env.*
+config/config.json
+config/push_config.json
 
 # Databases
 *.db

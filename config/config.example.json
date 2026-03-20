@@ -46,8 +46,8 @@
     "timezone": "UTC"
   },
   "telegram": {
-    "botToken": "8729905169:AAFy3zOHkD84JgtWg0Zmt4Bo7UNlGyQUstM",
-    "chatId": "7974510481"
+    "botToken": "YOUR_BOT_TOKEN_HERE",
+    "chatId": "YOUR_CHAT_ID_HERE"
   },
   "output": {
     "report_format": "markdown",
